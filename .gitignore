@@ -1,0 +1,10 @@
+venv/
+__pycache__/
+*.py[cod]
+*.db-journal
+.env
+data/
+caddy_data/
+caddy_config/
+uploads/*
+!uploads/.gitkeep

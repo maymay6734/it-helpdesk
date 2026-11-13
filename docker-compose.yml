@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  app:
+    build: .
+    container_name: it_helpdesk_app
+    restart: always
+    environment:
+      - ADMIN_PIN=${ADMIN_PIN:-1234}
+      - PORT=8000
+    volumes:
+      - ./uploads:/app/uploads
+      - ./helpdesk.db:/app/helpdesk.db
+    networks:
+      - helpdesk_net
+
+  caddy:
+    image: caddy:2-alpine
+    container_name: it_helpdesk_caddy
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      - DOMAIN=${DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - app
+    networks:
+      - helpdesk_net
+
+volumes:
+  caddy_data:
+  caddy_config:
+
+networks:
+  helpdesk_net:
+    driver: bridge
