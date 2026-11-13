@@ -1085,18 +1085,38 @@
       document.getElementById('pinErrorMsg').classList.add('hidden');
     }
 
-    function handlePinSubmit(e) {
+    async function handlePinSubmit(e) {
       e.preventDefault();
       const pin = document.getElementById('inputPin').value.trim();
       const errorMsg = document.getElementById('pinErrorMsg');
 
-      if (pin === adminPin || pin === '1234') {
+      // 1. Проверяем PIN из Supabase или localStorage
+      let expectedPin = adminPin || '1234';
+      if (supabaseClient) {
+        try {
+          const { data } = await supabaseClient
+            .from('settings')
+            .select('value')
+            .eq('key', 'admin_pin')
+            .maybeSingle();
+          if (data && data.value) {
+            expectedPin = data.value;
+            adminPin = expectedPin;
+            localStorage.setItem('helpdesk_admin_pin', expectedPin);
+          }
+        } catch (err) {
+          console.warn('Settings load error:', err);
+        }
+      }
+
+      // Проверяем ТОЛЬКО установленный PIN (старый 1234 сбрасывается)
+      if (pin === expectedPin) {
         isAdmin = true;
         closePinModal();
         document.getElementById('adminBtnText').innerText = 'Кабинет сисадмина';
         switchTab('admin');
       } else {
-        errorMsg.innerText = 'Неверный PIN-код (по умолчанию 1234)';
+        errorMsg.innerText = 'Неверный PIN-код';
         errorMsg.classList.remove('hidden');
       }
     }
@@ -1522,12 +1542,15 @@
       if (pin) {
         adminPin = pin;
         localStorage.setItem('helpdesk_admin_pin', pin);
+        if (supabaseClient) {
+          supabaseClient.from('settings').upsert({ key: 'admin_pin', value: pin }).then(() => {});
+        }
       }
       localStorage.setItem('helpdesk_tg_token', tgToken);
       localStorage.setItem('helpdesk_tg_chat', tgChat);
 
       initSupabase();
-      alert('Настройки сохранены!');
+      alert('Настройки сохранены! Новый PIN-код успешно установлен.');
       closeSettingsModal();
       if (isAdmin) loadAdminDashboard();
     }
@@ -1550,11 +1573,20 @@ create table if not exists public.tickets (
   images jsonb default '[]'::jsonb
 );
 
--- 2. Включаем публичный доступ (RLS)
+-- 2. Таблица настроек (синхронизация PIN-кода на всех устройствах)
+create table if not exists public.settings (
+  key text primary key,
+  value text not null
+);
+
+-- 3. Включаем публичный доступ (RLS)
 alter table public.tickets enable row level security;
 create policy "Доступ ко всем заявкам" on public.tickets for all using (true) with check (true);
 
--- 3. Публичный бакет для фото
+alter table public.settings enable row level security;
+create policy "Доступ к настройкам" on public.settings for all using (true) with check (true);
+
+-- 4. Публичный бакет для фото
 insert into storage.buckets (id, name, public) values ('photos', 'photos', true) on conflict (id) do nothing;
 create policy "Загрузка фото" on storage.objects for all using (bucket_id = 'photos') with check (bucket_id = 'photos');`;
 
