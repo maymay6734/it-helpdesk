@@ -616,9 +616,15 @@
   <!-- APPLICATION SCRIPTS -->
   <script>
     // Config state
+    const DEFAULT_SB_URL = 'https://agcvioqzesemeppynnmp.supabase.co';
+    const DEFAULT_SB_KEY = 'sb_publishable_Gv0iWE16H_PCydKohOXKKg_I2m2_Whp';
+
     let supabaseClient = null;
-    let supabaseUrl = localStorage.getItem('helpdesk_sb_url') || 'https://agcvioqzesemeppynnmp.supabase.co';
-    let supabaseKey = localStorage.getItem('helpdesk_sb_key') || '';
+    let supabaseUrl = localStorage.getItem('helpdesk_sb_url') || DEFAULT_SB_URL;
+    let supabaseKey = localStorage.getItem('helpdesk_sb_key') || DEFAULT_SB_KEY;
+    if (!supabaseKey || supabaseKey.trim() === '') supabaseKey = DEFAULT_SB_KEY;
+    if (!supabaseUrl || supabaseUrl.trim() === '') supabaseUrl = DEFAULT_SB_URL;
+
     let adminPin = localStorage.getItem('helpdesk_admin_pin') || '1234';
     let isAdmin = false;
 
@@ -836,23 +842,44 @@
       `;
 
       try {
-        // 1. Upload photos to Supabase Storage if present
+        // 1. Upload photos to Supabase Storage if present (with base64 fallback)
         const uploadedImageUrls = [];
         for (const file of selectedFiles) {
           const fileExt = file.name.split('.').pop() || 'jpg';
           const fileName = `${Date.now()}_${Math.random().toString(36).substring(2, 8)}.${fileExt}`;
           const filePath = `${fileName}`;
           
-          const { data: uploadData, error: uploadErr } = await supabaseClient.storage
-            .from('photos')
-            .upload(filePath, file);
-
-          if (!uploadErr) {
-            const { data: urlData } = supabaseClient.storage
+          let uploaded = false;
+          try {
+            const { data: uploadData, error: uploadErr } = await supabaseClient.storage
               .from('photos')
-              .getPublicUrl(filePath);
-            if (urlData && urlData.publicUrl) {
-              uploadedImageUrls.push({ file_path: urlData.publicUrl, filename: fileName });
+              .upload(filePath, file);
+
+            if (!uploadErr) {
+              const { data: urlData } = supabaseClient.storage
+                .from('photos')
+                .getPublicUrl(filePath);
+              if (urlData && urlData.publicUrl) {
+                uploadedImageUrls.push({ file_path: urlData.publicUrl, filename: fileName });
+                uploaded = true;
+              }
+            }
+          } catch (e) {
+            console.warn('Storage upload error, using fallback:', e);
+          }
+
+          // Fallback to base64 if storage bucket is not configured yet
+          if (!uploaded) {
+            try {
+              const base64Url = await new Promise((resolve, reject) => {
+                const reader = new FileReader();
+                reader.onload = () => resolve(reader.result);
+                reader.onerror = reject;
+                reader.readAsDataURL(file);
+              });
+              uploadedImageUrls.push({ file_path: base64Url, filename: file.name });
+            } catch (e) {
+              console.error('Base64 error:', e);
             }
           }
         }
