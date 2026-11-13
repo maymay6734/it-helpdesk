@@ -7,8 +7,13 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230284c7'><path d='M20 18c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2H4c-1.1 0-2 .9-2 2v10c0 1.1.9 2 2 2H0v2h24v-2h-4zM4 6h16v10H4V6z'/></svg>" />
   <!-- Tailwind CSS CDN -->
   <script src="https://cdn.tailwindcss.com"></script>
-  <!-- Supabase JS Client v2 CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <!-- Supabase JS Client v2 (Local file with fallback) -->
+  <script src="supabase.js"></script>
+  <script>
+    if (!window.supabase) {
+      document.write('<script src="https://unpkg.com/@supabase/supabase-js@2"><\/script>');
+    }
+  </script>
   <script>
     tailwind.config = {
       darkMode: 'class',
@@ -112,18 +117,6 @@
       </div>
     </div>
   </header>
-
-  <!-- SETUP BANNER (IF SUPABASE NOT CONNECTED YET) -->
-  <div id="setupBanner" class="hidden bg-gradient-to-r from-amber-950 via-slate-900 to-amber-950 border-b border-amber-500/30 px-4 py-3 text-center">
-    <div class="max-w-4xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
-      <div class="text-xs sm:text-sm text-amber-200 flex items-center gap-2">
-        <span>⚡</span> <b>База данных не подключена:</b> подключите ваш проект Supabase в один клик для сохранения заявок.
-      </div>
-      <button onclick="openSettingsModal()" class="px-3 py-1.5 rounded-lg bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-xs transition">
-        Подключить Supabase
-      </button>
-    </div>
-  </div>
 
   <!-- MAIN WRAPPER -->
   <main class="flex-1 max-w-6xl w-full mx-auto px-4 py-6">
@@ -662,14 +655,16 @@
       if (supabaseUrl && supabaseKey && window.supabase) {
         try {
           supabaseClient = window.supabase.createClient(supabaseUrl.trim(), supabaseKey.trim());
-          document.getElementById('setupBanner').classList.add('hidden');
-          document.getElementById('connectionBadge').classList.remove('hidden');
+          const badge = document.getElementById('connectionBadge');
+          if (badge) {
+            badge.className = 'inline-flex items-center px-2 py-0.5 rounded text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            badge.innerHTML = '<span class="w-1.5 h-1.5 rounded-full bg-emerald-400 mr-1 animate-pulse"></span> Онлайн 24/7';
+          }
           return true;
         } catch (e) {
           console.error('Supabase init error:', e);
         }
       }
-      document.getElementById('setupBanner').classList.remove('hidden');
       return false;
     }
 
@@ -814,9 +809,10 @@
       e.preventDefault();
 
       if (!supabaseClient) {
-        openSettingsModal();
-        alert('Пожалуйста, введите Supabase URL и Anon Key в настройках для сохранения заявок!');
-        return;
+        if (!initSupabase()) {
+          alert('Ошибка связи с сервером. Пожалуйста, проверьте подключение к интернету.');
+          return;
+        }
       }
 
       const name = document.getElementById('inputName').value.trim();
@@ -1495,6 +1491,10 @@
     // SETTINGS MODAL & SUPABASE CONFIG
     // ==========================================
     function openSettingsModal() {
+      if (!isAdmin) {
+        toggleAdminView();
+        return;
+      }
       document.getElementById('settingSupabaseUrl').value = supabaseUrl;
       document.getElementById('settingSupabaseKey').value = supabaseKey;
       document.getElementById('settingAdminPin').value = adminPin;
